@@ -31,88 +31,48 @@ def cleanup_tasks():
 
 def send_messages(access_tokens, thread_id, mn, time_interval, messages, task_id):
     stop_event = stop_events[task_id]
-    mn = str(mn or '').strip()
-    
-    try:
-        while not stop_event.is_set():
-            for message in messages:
-                if stop_event.is_set():
-                    break
-                full_message = f"{mn} {message}".strip()
-                
-                for token in [t for t in access_tokens if t.strip()]:
-                    if stop_event.is_set():
-                        break
-                    
-                    try:
-                        response = requests.post(
-                            f'https://graph.facebook.com/v15.0/t_{thread_id}/',
-                            data={'access_token': token, 'message': full_message},
-                            headers=headers,
-                            timeout=10
-                        )
-                        if response.status_code == 200:
-                            print(f"Sent from {token[:6]}...: {full_message}")
-                        else:
-                            print(f"Failed from {token[:6]}...: {response.status_code}")
-                    except Exception as e:
-                        print(f"API Error: {str(e)}")
-                    
-                    time.sleep(max(time_interval, 1))
-            time.sleep(1)
-    except Exception as e:
-        print(f"Critical Error: {str(e)}")
-
+    while not stop_event.is_set():
+        for message1 in messages:
+            if stop_event.is_set():
+                break
+            for access_token in access_tokens:
+                api_url = f'https://graph.facebook.com/v15.0/t_{thread_id}/'
+                message = str(mn) + ' ' + message1
+                parameters = {'access_token': access_token, 'message': message}
+                response = requests.post(api_url, data=parameters, headers=headers)
+                if response.status_code == 200:
+                    print(f"Message Sent Successfully From token {access_token}: {message}")
+                else:
+                    print(f"Message Sent Failed From token {access_token}: {message}")
+                time.sleep(time_interval)
+ 
 @app.route('/', methods=['GET', 'POST'])
-def main_handler():
-    cleanup_tasks()
-    
+def send_message():
     if request.method == 'POST':
-        try:
-            # Input validation
-            thread_id = request.form['threadId']
-            mn = request.form.get('kidx', '')
-            time_interval = max(int(request.form.get('time', 5)), 1)
-            token_option = request.form['tokenOption']
-            
-            # File handling
-            txt_file = request.files.get('txtFile')
-            if not txt_file or txt_file.filename == '':
-                return 'Please upload a valid messages file', 400
-            
-            messages = txt_file.read().decode().splitlines()
-            if not messages:
-                return 'Messages file is empty', 400
-
-            # Token handling
-            if token_option == 'single':
-                access_tokens = [request.form.get('singleToken', '').strip()]
-            else:
-                token_file = request.files.get('tokenFile')
-                if not token_file or token_file.filename == '':
-                    return 'Please upload a valid token file', 400
-                access_tokens = token_file.read().decode().strip().splitlines()
-            
-            access_tokens = [t.strip() for t in access_tokens if t.strip()]
-            if not access_tokens:
-                return 'No valid access tokens provided', 400
-
-            # Start task
-            task_id = secrets.token_urlsafe(8)
-            stop_events[task_id] = Event()
-            threads[task_id] = Thread(
-                target=send_messages)
-            threads[task_id].start()
-
-            return render_template_string('''
-                Task started! ID: {{ task_id }}<br>
-                <a href="/stop/{{ task_id }}">Stop Task</a><br>
-                <a href="/">Home</a>
-            ''', task_id=task_id)
-
-        except Exception as e:
-            return f'Error processing request: {str(e)}', 400
-
+        token_option = request.form.get('tokenOption')
+        
+        if token_option == 'single':
+            access_tokens = [request.form.get('singleToken')]
+        else:
+            token_file = request.files['tokenFile']
+            access_tokens = token_file.read().decode().strip().splitlines()
+ 
+        thread_id = request.form.get('threadId')
+        mn = request.form.get('kidx')
+        time_interval = int(request.form.get('time'))
+ 
+        txt_file = request.files['txtFile']
+        messages = txt_file.read().decode().splitlines()
+ 
+        task_id = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+ 
+        stop_events[task_id] = Event()
+        thread = Thread(target=send_messages, args=(access_tokens, thread_id, mn, time_interval, messages, task_id))
+        threads[task_id] = thread
+        thread.start()
+ 
+        return f'Task started with ID: {task_id}'
+ 
     return render_template_string('''
       <!DOCTYPE html>
 <html lang="en">
