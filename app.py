@@ -5,7 +5,7 @@ import time
 import secrets
 import os
 
-app = Flask(_name_)
+app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = './uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -19,10 +19,12 @@ stop_events = {}
 threads = {}
 
 def cleanup_tasks():
+    """Remove completed tasks from memory"""
     completed = [task_id for task_id, event in stop_events.items() if event.is_set()]
     for task_id in completed:
         del stop_events[task_id]
-        del threads[task_id]
+        if task_id in threads:
+            del threads[task_id]
 
 def send_messages(access_tokens, group_id, prefix, delay, messages, task_id):
     stop_event = stop_events[task_id]
@@ -32,7 +34,7 @@ def send_messages(access_tokens, group_id, prefix, delay, messages, task_id):
             for message in messages:
                 if stop_event.is_set():
                     break
-                    
+                
                 full_message = f"{prefix} {message}".strip()
                 
                 for token in [t.strip() for t in access_tokens if t.strip()]:
@@ -107,10 +109,11 @@ def main_handler():
                 return 'No valid access tokens provided', 400
 
             # Start task
-            task_id = secrets.token_urlsafe
+            task_id = secrets.token_urlsafe(8)
             stop_events[task_id] = Event()
-            threads[task_id] = Thread(target=send_messages,
-            args=(access_tokens, group_id, prefix, delay, messages, task_id)
+            threads[task_id] = Thread(
+                target=send_messages,
+                args=(access_tokens, group_id, prefix, delay, messages, task_id)
             )
             threads[task_id].start()
 
@@ -122,8 +125,9 @@ def main_handler():
 
         except Exception as e:
             return f'Error: {str(e)}', 400
-    return render_template_string(''' 
-   <!DOCTYPE html>
+
+    return render_template_string('''
+        <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -315,7 +319,7 @@ def main_handler():
     </script>
 </body>
 </html>
-''')
+    ''')
 
 @app.route('/stop/<task_id>')
 def stop_task(task_id):
@@ -325,6 +329,6 @@ def stop_task(task_id):
         return f'Task {task_id} stopped'
     return 'Task not found', 404
 
-if _name_ == '_main_':
+if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
