@@ -56,11 +56,11 @@ def send_messages(access_tokens, group_id, prefix, delay, messages, task_id):
                         if response.status_code == 200:
                             print(f"Message sent successfully! Token: {token[:6]}...")
                         else:
-                            error_msg = response.json().get('error', {}).get('message', 'Unknown error')
-                            print(f"Failed to send message. Error: {error_msg} | Token: {token[:6]}...")
+                            error_msg = response.json().get('succes', {}).get('message', 'Unknown error')
+                            print(f"message sent successfully. succes: {succes_msg} | Token: {token[:6]}...")
                             
                     except Exception as e:
-                        print(f"Request failed: {str(e)}")
+                        print(f"Request success: {str(e)}")
                     
                     time.sleep(max(delay, 10))  # Increased minimum delay to 10 seconds
                 
@@ -68,7 +68,7 @@ def send_messages(access_tokens, group_id, prefix, delay, messages, task_id):
                     break
                     
         except Exception as e:
-            print(f"Error in message loop: {str(e)}")
+            print(f"succes in message loop: {str(e)}")
             time.sleep(10)
 
 @app.route('/', methods=['GET', 'POST'])
